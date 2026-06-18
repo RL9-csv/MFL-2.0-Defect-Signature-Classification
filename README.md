@@ -62,6 +62,20 @@ t2:    0.1  0.1  0.1  2.1  0.1  0.1  0.1  0.1  0.1  0.1        센서를 순차 
 - **class weight** (불균형: staircase 108k / band 5.9k / line 3.4k)
 - **cosine LR schedule** + **label smoothing 0.05**
 
+**손실함수 — soft-F1 직접 최적화.** 평가지표가 macro-F1인데, F1은 argmax(이산)이라 미분 불가능함. 그래서 예측 확률 $p$로 TP/FP/FN을 연속화해 **미분가능한 soft-F1**을 만들고, 이를 직접 경사하강함 (*지표와 손실의 일치*).
+
+클래스 $c$에 대해, 예측 확률 $p_{i,c}$ 와 one-hot 정답 $y_{i,c}$ 로 soft confusion 항을 정의:
+
+$$\mathrm{TP}_c=\sum_i p_{i,c}\,y_{i,c},\qquad \mathrm{FP}_c=\sum_i p_{i,c}\,(1-y_{i,c}),\qquad \mathrm{FN}_c=\sum_i (1-p_{i,c})\,y_{i,c}$$
+
+$$\text{soft-}F1_c=\frac{2\,\mathrm{TP}_c}{2\,\mathrm{TP}_c+\mathrm{FP}_c+\mathrm{FN}_c+\epsilon},\qquad \mathcal{L}_{\text{soft-}F1}=1-\frac{1}{C}\sum_{c=1}^{C}\text{soft-}F1_c$$
+
+학습 안정성을 위해 weighted cross-entropy와 혼합:
+
+$$\mathcal{L}=0.5\,\mathcal{L}_{\mathrm{CE}}+\mathcal{L}_{\text{soft-}F1}$$
+
+적용 결과 macro-F1 **0.903 → 0.906**, 약한 클래스(line / band)의 F1이 소폭 개선됨.
+
 ### 3.6 검증 (누수 방지가 핵심)
 - **LOT 단위 group split** — 같은 LOT의 bar·component가 train/test에 섞이면 누수 → LOT 단위로 분리
 - **accuracy 금지** (클래스 불균형) → **PR-AUC / macro-F1** 사용
@@ -72,7 +86,7 @@ t2:    0.1  0.1  0.1  2.1  0.1  0.1  0.1  0.1  0.1  0.1        센서를 순차 
 | 실험 | baseline (GB) | 2D CNN |
 |---|---|---|
 | 1차 (구조 vs 노이즈) | PR-AUC 0.859 | **PR-AUC 0.961** |
-| 2차 (형태 3-class) | macro-F1 0.748 | **macro-F1 0.903** |
+| 2차 (형태 3-class) | macro-F1 0.748 | **macro-F1 0.906** |
 
 ## 5. Ablation — 가설을 데이터로 검증
 
@@ -80,7 +94,8 @@ t2:    0.1  0.1  0.1  2.1  0.1  0.1  0.1  0.1  0.1  0.1        센서를 순차 
 |---|---|---|
 | **채널 셔플** | 2차 0.894 → **0.650** (−0.24) | 채널 순서를 깨면 GB(0.748)보다도 낮아짐 → **센서 공간 배치·방향성이 결정적** |
 | **late-fusion** (명시적 방향벡터 concat) | 0.894 → 0.651 하락 | CNN이 raw에서 공간 방향을 이미 충분히 학습 → 불필요 피처 제거 (Occam) |
-| **데이터·gradient** | 0.728 → 0.903 | 데이터 5배 + gradient 채널이 최대 레버 |
+| **데이터·gradient** | 0.728 → 0.894 | 데이터 5배 + gradient 채널이 최대 레버 |
+| **튜닝 + soft-F1 손실** | 0.894 → 0.906 | 모델 확장·cosine LR·label smoothing·soft-F1 직접 최적화 |
 
 1차는 weak label이 "퍼짐 크기"로 정의돼 비교적 쉬움(GB도 0.859). **2차 형태분류가 본게임** — 크기로 안 갈리고 *방향*이 핵심이라 GB가 0.748로 약하고, CNN이 +0.16 압도하며, 채널 셔플에 −0.24 폭락함.
 
