@@ -111,5 +111,33 @@ $$\mathcal{L}=0.5\,\mathcal{L}_{\mathrm{CE}}+\mathcal{L}_{\text{soft-}F1}$$
 - 장비 임계가 만든 **허위경보(overkill) 분리** = PE 핵심 KPI(수율 손실 방지)
 - wafer/bin map의 공간 failure-pattern classification과 **구조적으로 유사** (물리현상 동일시 아님)
 
+## 프로젝트 구조
+
+```
+mfl/                 # 핵심 패키지 (캡슐화된 모듈)
+  config.py          # 경로·도메인 상수 (MFL_DATA 환경변수)
+  io.py              # BAR/LOT CSV 로딩 (NUL-safe)
+  defects.py         # component 추출·형태 라벨·패치 텐서화
+  topology.py        # 센서 인접 역추정 (전이행렬)
+  model.py           # DefectCNN + soft-F1 손실
+  training.py        # LOT group split·학습·평가
+  pipeline.py        # 원본 → 패치 데이터셋 조립
+scripts/             # 실행 진입점
+  build_dataset.py   # 패치 데이터셋 생성
+  train_shape.py     # CNN 학습·평가
+tests/               # 단위 테스트 (15 cases, pytest)
+```
+
+## 실행
+
+```bash
+pip install -r requirements.txt
+export MFL_DATA=/path/to/mlft_data       # 데이터 루트 지정 (하드코딩 경로 없음)
+
+python -m scripts.build_dataset          # 패치 데이터셋 생성 → X/y/groups.npy
+python -m scripts.train_shape            # CNN 학습·평가 (macro-F1 출력)
+pytest                                   # 단위 테스트 (15 passed)
+```
+
 ## Stack
 Python · PyTorch · scikit-learn · SciPy · NumPy
