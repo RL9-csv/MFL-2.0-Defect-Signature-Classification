@@ -54,21 +54,30 @@ for d in dates:
                 if lab in shape_ex and shape_ex[lab] is None:
                     shape_ex[lab] = to_tensor(extract_patch(bar, int(round(co[:, 0].mean()))))[0]
 
-# ---- 1. SPC 관리도 ----
+# ---- 1. SPC 관리도 (정규성 확인 후 ±3σ) ----
+from scipy.stats import skew as _skew
 lot = max(lot_series, key=lambda k: len(lot_series[k]))
 s = np.array(lot_series[lot])
-mu, sd = s.mean(), s.std()
-plt.figure(figsize=(11, 5))
-plt.plot(s, "o-", color="#4da3ff", label="base noise (trimmed-10% mean)")
-for k, c, ls in [(3, "#b04a4a", "--"), (0, "#888", "-")]:
-    plt.axhline(mu + k * sd, color=c, ls=ls, lw=1.3,
-                label=f"mean{'+3σ (UCL)' if k else ' (CL)'}")
-plt.axhline(mu - 3 * sd, color="#b04a4a", ls="--", lw=1.3, label="mean−3σ (LCL)")
+mu, sd, sk = s.mean(), s.std(), float(_skew(s))
+print(f"SPC base-noise skew = {sk:.3f}  (|skew|<0.5 ~ near-normal)")
+
+fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw={"width_ratios": [1, 2]})
+# (좌) 정규성 확인 — base noise는 trimmed 표본평균이라 CLT로 정규에 근사
+sns.histplot(s, kde=True, color="#4da3ff", ax=ax[0])
+ax[0].axvline(mu, color="#888", ls="-")
+ax[0].set_title(f"normality check\nbase-noise dist (skew = {sk:.2f})", fontsize=13)
+ax[0].set_xlabel("base noise (V)")
+# (우) 관리도 — 정규성 확보 후에만 ±3σ가 유효
+ax[1].plot(s, "o-", color="#4da3ff", ms=4, lw=1, label="base noise (trimmed-10% mean)")
+ax[1].axhline(mu, color="#888", lw=1.3, label="mean (CL)")
+ax[1].axhline(mu + 3 * sd, color="#b04a4a", ls="--", lw=1.3, label="±3σ (UCL / LCL)")
+ax[1].axhline(mu - 3 * sd, color="#b04a4a", ls="--", lw=1.3)
 out = np.where(np.abs(s - mu) > 3 * sd)[0]
 if len(out):
-    plt.scatter(out, s[out], color="red", zorder=5, s=90, label="out-of-control")
-plt.title(f"SPC Control Chart — base-noise per bar (LOT {lot})")
-plt.xlabel("bar sequence"); plt.ylabel("base noise (V)"); plt.legend(fontsize=10)
+    ax[1].scatter(out, s[out], color="red", zorder=5, s=80, label="out-of-control")
+ax[1].set_title(f"SPC control chart — LOT {lot}", fontsize=13)
+ax[1].set_xlabel("bar sequence"); ax[1].set_ylabel("base noise (V)")
+ax[1].legend(fontsize=9)
 plt.tight_layout(); plt.savefig(f"{OUT}/01_spc_control_chart.png", dpi=130); plt.close()
 
 # ---- 2. 채널 상관 히트맵 (슈머: 파라미터 상관) ----
